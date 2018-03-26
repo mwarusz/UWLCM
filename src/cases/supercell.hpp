@@ -17,8 +17,8 @@ namespace setup
     const quantity<si::pressure, real_t> p_0 = real_t(1e5) * si::pascals;
     const quantity<si::length, real_t> 
       Z    = real_t(17850) * si::metres,
-      X    = real_t(84e3) * si::metres,
-      Y    = real_t(84e3) * si::metres,
+      X    = real_t(128e3) * si::metres,
+      Y    = real_t(128e3) * si::metres,
       z_tr = real_t(12e3) * si::metres;
     
     const quantity<si::temperature, real_t> tht_0  = 300 * si::kelvins;
@@ -37,6 +37,7 @@ namespace setup
         //const auto tht_below = tht_0 + (tht_tr - tht_0) * zfac;
         const quantity<si::temperature, real_t> tht_above = tht_tr * std::exp(g<real_t>() / (c_pd<real_t>() * T_tr) * (z - z_tr));
         return z < z_tr ? tht_below / si::kelvins : tht_above / si::kelvins;
+        //return tht_0.value();
       }
       BZ_DECLARE_FUNCTOR(wk_tht_fctr);
     };
@@ -49,6 +50,7 @@ namespace setup
         const auto RH_below = static_cast<quantity<si::dimensionless, real_t>>(1 - 0.75 * pow<rat<5, 4>>(z / z_tr));
         const quantity<si::dimensionless, real_t> RH_above = 0.25;
         return z < z_tr ? RH_below : RH_above;
+        //return 0.0;
       }
       BZ_DECLARE_FUNCTOR(wk_RH_fctr);
     };
@@ -58,7 +60,8 @@ namespace setup
       real_t operator()(const real_t &zz) const
       {
         const quantity<si::length, real_t> z = zz * si::metres;
-        return 25 * std::tanh(zz / z_tr.value()) - 0.64 * 25;
+        return 25 * std::tanh(zz / 3e3) - 0.64 * 25;
+        //return 0;
       }
       BZ_DECLARE_FUNCTOR(u_fctr);
     };
@@ -76,9 +79,9 @@ namespace setup
         params.outfreq = user_params.outfreq;
         params.spinup = user_params.spinup;
         params.w_src = user_params.w_src;
-        params.uv_src = user_params.uv_src;
-        params.th_src = user_params.th_src;
-        params.rv_src = user_params.rv_src;
+        params.uv_src = false;
+        params.rv_src = false;
+        params.th_src = false;
         params.dt = user_params.dt;
         params.nt = user_params.nt;
         params.buoyancy_wet = true;
@@ -87,33 +90,30 @@ namespace setup
       }
 
       template <class index_t>
-      void intcond_hlpr(concurr_t &solver, arr_1D_t &rhod, arr_1D_t &rv_e, int rng_seed, index_t index)
+      void intcond_hlpr(concurr_t &solver, arr_1D_t &rhod, arr_1D_t &rv_e, arr_1D_t &th_e, int rng_seed, index_t index)
       {
         using ix = typename concurr_t::solver_t::ix;
         int nz = solver.advectee().extent(ix::w);
 
         real_t dz = (Z / si::metres) / (nz - 1); 
       
-        arr_1D_t th_e(nz), RH_e(nz), p_e(nz), T_e(nz);
-        wk_1982_prof(th_e, RH_e, p_e, T_e, nz);
+        //arr_1D_t th_e(nz), RH_e(nz), p_e(nz), T_e(nz);
+        //wk_1982_prof(th_e, RH_e, p_e, T_e, nz);
 
-        std::cout << "Weisman & Klemp profiles" << std::endl;
-        for (int k = 0; k < nz; ++k)
-        {
-          std::cout << std::setw(10) << k * dz << ' '
-                    << std::setw(10) << th_e(k) << ' ' 
-                    << std::setw(10) << RH_e(k) << ' ' 
-                    << std::setw(10) << p_e(k) << ' ' 
-                    << std::setw(10) << T_e(k) << std::endl;
-        }
   
         solver.advectee(ix::rv) = rv_e(index); 
-        solver.advectee(ix::u)  = u_fctr{}(index);
+        solver.advectee(ix::u)  = u_fctr{}(index * dz);
         solver.advectee(ix::w)  = 0;  
        
         // absorbers
-        solver.vab_coefficient() = 0;
+        const real_t z_abs = 15000;
+        solver.vab_coefficient() = where(index * dz >= z_abs,
+                                         1. / 100 * (index * dz - z_abs)/ (Z / si::metres - z_abs),
+                                         0);
+        //solver.vab_coefficient() = 0;
+
         solver.vab_relaxed_state(0) = 0;
+        solver.vab_relaxed_state(ix::w) = 0;
   
         // density profile
         solver.g_factor() = rhod(index);
@@ -164,12 +164,15 @@ namespace setup
 
         arr_1D_t RH_e(nz), T_e(nz);
         wk_1982_prof(th_e, RH_e, pre_ref, T_e, nz);
+        
+        arr_1D_t test_T(nz), test_p(nz), test_rvs(nz);
 
         const real_t max_rv_e = 0.014;
         using libcloudphxx::common::const_cp::r_vs;
         for (int k = 0; k < nz; ++k)
         {
           rv_e(k) = std::min(max_rv_e, static_cast<real_t>(RH_e(k) * r_vs(T_e(k) * si::kelvins, pre_ref(k) * si::pascals)));
+          //rv_e(k) = 0;
         }
 
         using libcloudphxx::common::earth::g;
@@ -180,18 +183,48 @@ namespace setup
         const auto c_pd_v = c_pd<real_t>().value();
         const auto R_d_over_c_pd_v = R_d_over_c_pd<real_t>().value();
 
-        // compute reference anelastic profiles
-        const real_t stab = 1.235e-5;
-        th_ref = tht_0.value() * exp(stab * k * dz);
+        //// compute reference anelastic profiles
+        //const real_t stab = 1.235e-5;
+        //th_ref = tht_0.value() * exp(stab * k * dz);
 
-        auto cs_v = g_v / (c_pd_v * tht_0.value() * stab);
-        const real_t rho_0_v = 1.11;
-        rhod = rho_0_v * exp(-stab * k * dz) * pow(1 - cs_v * (1 - exp(-stab * k * dz)), 1. / R_d_over_c_pd_v - 1);
-
+        //auto cs_v = g_v / (c_pd_v * tht_0.value() * stab);
+        //const real_t rho_0_v = 1.11;
+        //rhod = rho_0_v * exp(-stab * k * dz) * pow(1 - cs_v * (1 - exp(-stab * k * dz)), 1. / R_d_over_c_pd_v - 1);
+        ////rhod = rho_0_v;
+        
         // theta_std env prof to theta_dry_e
         for(int k = 0; k < nz; ++k)
         {
           th_e(k) = theta_dry::std2dry<real_t>(th_e(k) * si::kelvins, quantity<si::dimensionless, real_t>(rv_e(k))) / si::kelvins;
+        }
+
+        using libcloudphxx::common::moist_air::R_d;
+        const auto R_d_v = R_d<real_t>().value();
+        const auto p_1000_v = p_1000<real_t>().value();
+        // take reference profiles from initial wk soundings
+        for (int k = 0; k < nz; ++k)
+        {
+          rhod(k) = std::pow(th_e(k) * std::pow(T_e(k), R_d_v / c_pd_v - 1), -c_pd_v / R_d_v) * p_1000_v / R_d_v;
+          th_ref(k) = th_e(k);
+        }
+        
+        for (int k = 0; k < nz; ++k)
+        {
+          test_T(k) = libcloudphxx::common::theta_dry::T<real_t>(th_e(k) * si::kelvins,
+                                                                 rhod(k) * si::kilograms / si::cubic_meters) / si::kelvins;
+          test_p(k) = libcloudphxx::common::theta_dry::p<real_t>(rhod(k) * si::kilograms / si::cubic_metres,
+                                                                 rv_e(k), test_T(k) * si::kelvins) / si::pascals;
+          test_rvs(k) = std::min(max_rv_e, static_cast<real_t>(RH_e(k) * r_vs(test_T(k) * si::kelvins, test_p(k) * si::pascals)));
+        }
+        
+        std::cout << "Weisman & Klemp profiles" << std::endl;
+        for (int k = 0; k < nz; ++k)
+        {
+          std::cout << std::setw(10) << k * dz << ' '
+                    << std::setw(10) << th_e(k) << ' ' 
+                    << std::setw(10) << RH_e(k) << ' ' 
+                    << std::setw(10) << pre_ref(k) << ' ' 
+                    << std::setw(10) << T_e(k) << std::endl;
         }
         
         std::cout << "env profiles" << std::endl;
@@ -202,6 +235,26 @@ namespace setup
                     << std::setw(10) << rhod(k) << ' ' 
                     << std::setw(10) << rv_e(k) << std::endl;
         }
+        
+        std::cout << "test profiles" << std::endl;
+        for (int k = 0; k < nz; ++k)
+        {
+          std::cout << std::setw(10) << k * dz << ' '
+                    << std::setw(10) << test_T(k) << ' ' 
+                    << std::setw(10) << T_e(k) << ' ' 
+                    << std::setw(10) << test_p(k) << ' ' 
+                    << std::setw(10) << pre_ref(k) << ' ' 
+                    << std::setw(10) << test_rvs(k) << ' ' 
+                    << std::setw(10) << rv_e(k)
+                    << std::endl;
+        }
+        
+        //for (int k = 0; k < nz; ++k)
+        //{
+        //  T_e(k)  = test_T(k);
+        //  pre_ref(k)  = test_p(k);
+        //  rv_e(k)  = test_rvs(k);
+        //}
       }
 
       // ctor
@@ -229,7 +282,7 @@ namespace setup
         blitz::secondIndex j;
         blitz::thirdIndex k;
 
-        this->intcond_hlpr(solver, rhod, rv_e, rng_seed, k);
+        this->intcond_hlpr(solver, rhod, rv_e, th_e, rng_seed, k);
         using ix = typename concurr_t::solver_t::ix;
         //this->make_cyclic(solver.advectee(ix::th));
   

@@ -16,6 +16,23 @@ class slvr_blk_1m_common : public slvr_common<ct_params_t>
   using real_t = typename ct_params_t::real_t;
   private:
 
+  struct supers_fctr
+  {
+    real_t operator()(const real_t &th_v, const real_t &rv_v, const real_t & rhod_v) const
+    {
+      using namespace libcloudphxx::common;
+      const auto th = th_v * si::kelvins;
+      const quantity<si::dimensionless, real_t> rv = rv_v; 
+      const auto rhod = rhod_v * si::kilograms / si::cubic_metres;
+
+      const auto T = theta_dry::T<real_t>(th, rhod);
+      const auto p  = theta_dry::p<real_t>(rhod, rv, T);
+      const auto rs = const_cp::r_vs<real_t>(T, p);
+      return 100 * rv_v / rs.value();
+    }
+    BZ_DECLARE_FUNCTOR3(supers_fctr);
+  };
+
   void condevap()
   {
     auto 
@@ -25,6 +42,16 @@ class slvr_blk_1m_common : public slvr_common<ct_params_t>
       rr   = this->state(ix::rr)(this->ijk); // rain water mixing ratio
     auto const
       rhod = (*this->mem->G)(this->ijk);
+    
+    this->mem->barrier();
+    if (this->rank == 0)
+    {
+      auto full_th = this->state(ix::th)(this->domain);
+      auto full_rv = this->state(ix::rv)(this->domain);
+      auto const full_rhod = (*this->mem->G)(this->domain);
+      std::cout << "max super: " << max(supers_fctr{}(full_th, full_rv, full_rhod)) << std::endl;
+    }
+    this->mem->barrier();
       
     libcloudphxx::blk_1m::adj_cellwise<real_t>( 
       opts, rhod, th, rv, rc, rr, this->dt
@@ -46,6 +73,43 @@ class slvr_blk_1m_common : public slvr_common<ct_params_t>
   // deals with initial supersaturation
   void hook_ante_loop(int nt)
   {
+    this->mem->barrier();
+    if (this->rank == 0)
+    {
+      std::cout << "ante loop before " << std::endl;
+    std::cout << "u : "
+              << min(this->state(parent_t::ix::u)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::u)(this->domain))
+              << std::endl;
+    std::cout << "w : "
+              << min(this->state(parent_t::ix::w)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::w)(this->domain))
+              << std::endl;
+    std::cout << "th: " 
+              << min(this->state(parent_t::ix::th)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::th)(this->domain))
+              << std::endl;
+    std::cout << "rv: " 
+              << min(this->state(parent_t::ix::rv)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rv)(this->domain))
+              << std::endl;
+    std::cout << "rc: "
+              << min(this->state(parent_t::ix::rc)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rc)(this->domain))
+              << std::endl;
+    std::cout << "rr: " 
+              << min(this->state(parent_t::ix::rr)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rr)(this->domain))
+              << std::endl;
+    }
+    this->mem->barrier();
+
     // if uninitialised fill with zeros
     zero_if_uninitialised(ix::rc);
     zero_if_uninitialised(ix::rr);
@@ -54,11 +118,140 @@ class slvr_blk_1m_common : public slvr_common<ct_params_t>
     condevap();
 
     parent_t::hook_ante_loop(nt); // forcings after adjustments
+    
+    this->mem->barrier();
+    if (this->rank == 0)
+    {
+      std::cout << "ante loop after " << std::endl;
+    std::cout << "u : "
+              << min(this->state(parent_t::ix::u)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::u)(this->domain))
+              << std::endl;
+    std::cout << "w : "
+              << min(this->state(parent_t::ix::w)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::w)(this->domain))
+              << std::endl;
+    std::cout << "th: " 
+              << min(this->state(parent_t::ix::th)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::th)(this->domain))
+              << std::endl;
+    std::cout << "rv: " 
+              << min(this->state(parent_t::ix::rv)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rv)(this->domain))
+              << std::endl;
+    std::cout << "rc: "
+              << min(this->state(parent_t::ix::rc)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rc)(this->domain))
+              << std::endl;
+    std::cout << "rr: " 
+              << min(this->state(parent_t::ix::rr)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rr)(this->domain))
+              << std::endl;
+    }
+    this->mem->barrier();
   }
 
   void hook_ante_step()
-  {
+  { 
+    this->mem->barrier();
+    if (this->rank == 0)
+    {
+      std::cout << "timestep: " << this->timestep << std::endl;
+      std::cout << "ante step before " << std::endl;
+    std::cout << "u : "
+              << min(this->state(parent_t::ix::u)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::u)(this->domain))
+              << std::endl;
+    std::cout << "w : "
+              << min(this->state(parent_t::ix::w)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::w)(this->domain))
+              << std::endl;
+    std::cout << "th: " 
+              << min(this->state(parent_t::ix::th)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::th)(this->domain))
+              << std::endl;
+    std::cout << "rv: " 
+              << min(this->state(parent_t::ix::rv)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rv)(this->domain))
+              << std::endl;
+    std::cout << "rc: "
+              << min(this->state(parent_t::ix::rc)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rc)(this->domain))
+              << std::endl;
+    std::cout << "rr: " 
+              << min(this->state(parent_t::ix::rr)(this->domain))
+              << ' '
+              << max(this->state(parent_t::ix::rr)(this->domain))
+              << std::endl;
+    }
+    this->mem->barrier();
+
+    //std::cout << "u : " << sum(this->state(parent_t::ix::u)(this->ijk)) << std::endl;
+    ////std::cout << "v : " << sum(this->state(parent_t::ix::v)(this->ijk)) << std::endl;
+    //std::cout << "w : " << sum(this->state(parent_t::ix::w)(this->ijk)) << std::endl;
+    //std::cout << "th: " << sum(this->state(parent_t::ix::th)(this->ijk)) << std::endl;
+    //std::cout << "rv: " << sum(this->state(parent_t::ix::rv)(this->ijk)) << std::endl;
+    //std::cout << "rc: " << sum(this->state(parent_t::ix::rc)(this->ijk)) << std::endl;
+    //std::cout << "rr: " << sum(this->state(parent_t::ix::rr)(this->ijk)) << std::endl;
+
     parent_t::hook_ante_step();
+    
+    //this->mem->barrier();
+    //if (this->rank == 0)
+    //{
+    //  std::cout << "ante step after " << std::endl;
+    //std::cout << "u : "
+    //          << min(this->state(parent_t::ix::u)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::u)(this->domain))
+    //          << std::endl;
+    //std::cout << "w : "
+    //          << min(this->state(parent_t::ix::w)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::w)(this->domain))
+    //          << std::endl;
+    //std::cout << "th: " 
+    //          << min(this->state(parent_t::ix::th)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::th)(this->domain))
+    //          << std::endl;
+    //std::cout << "rv: " 
+    //          << min(this->state(parent_t::ix::rv)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rv)(this->domain))
+    //          << std::endl;
+    //std::cout << "rc: "
+    //          << min(this->state(parent_t::ix::rc)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rc)(this->domain))
+    //          << std::endl;
+    //std::cout << "rr: " 
+    //          << min(this->state(parent_t::ix::rr)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rr)(this->domain))
+    //          << std::endl;
+    //}
+    //this->mem->barrier();
+    
+    //std::cout << "ANTE STEP" << std::endl;
+    //std::cout << "u : " << sum(this->state(parent_t::ix::u)(this->ijk)) << std::endl;
+    ////std::cout << "v : " << sum(this->state(parent_t::ix::v)(this->ijk)) << std::endl;
+    //std::cout << "w : " << sum(this->state(parent_t::ix::w)(this->ijk)) << std::endl;
+    //std::cout << "th: " << sum(this->state(parent_t::ix::th)(this->ijk)) << std::endl;
+    //std::cout << "rv: " << sum(this->state(parent_t::ix::rv)(this->ijk)) << std::endl;
+    //std::cout << "rc: " << sum(this->state(parent_t::ix::rc)(this->ijk)) << std::endl;
+    //std::cout << "rr: " << sum(this->state(parent_t::ix::rr)(this->ijk)) << std::endl;
     // store rl for buoyancy
     this->r_l(this->ijk) = this->state(ix::rc)(this->ijk) + this->state(ix::rr)(this->ijk);
   }
@@ -85,8 +278,88 @@ class slvr_blk_1m_common : public slvr_common<ct_params_t>
   // 
   void hook_post_step()
   {
+    this->mem->barrier();
+    //if (this->rank == 0)
+    //{
+    //  std::cout << "post step before " << std::endl;
+    //std::cout << "u : "
+    //          << min(this->state(parent_t::ix::u)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::u)(this->domain))
+    //          << std::endl;
+    //std::cout << "w : "
+    //          << min(this->state(parent_t::ix::w)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::w)(this->domain))
+    //          << std::endl;
+    //std::cout << "th: " 
+    //          << min(this->state(parent_t::ix::th)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::th)(this->domain))
+    //          << std::endl;
+    //std::cout << "rv: " 
+    //          << min(this->state(parent_t::ix::rv)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rv)(this->domain))
+    //          << std::endl;
+    //std::cout << "rc: "
+    //          << min(this->state(parent_t::ix::rc)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rc)(this->domain))
+    //          << std::endl;
+    //std::cout << "rr: " 
+    //          << min(this->state(parent_t::ix::rr)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rr)(this->domain))
+    //          << std::endl;
+    //}
+    //this->mem->barrier();
     condevap(); // treat saturation adjustment as post-advection, pre-rhs adjustment
+    //std::cout << "POST STEP POST COND" << std::endl;
+    //std::cout << "u : " << sum(this->state(parent_t::ix::u)(this->ijk)) << std::endl;
+    ////std::cout << "v : " << sum(this->state(parent_t::ix::v)(this->ijk)) << std::endl;
+    //std::cout << "w : " << sum(this->state(parent_t::ix::w)(this->ijk)) << std::endl;
+    //std::cout << "th: " << sum(this->state(parent_t::ix::th)(this->ijk)) << std::endl;
+    //std::cout << "rv: " << sum(this->state(parent_t::ix::rv)(this->ijk)) << std::endl;
+    //std::cout << "rc: " << sum(this->state(parent_t::ix::rc)(this->ijk)) << std::endl;
+    //std::cout << "rr: " << sum(this->state(parent_t::ix::rr)(this->ijk)) << std::endl;
     parent_t::hook_post_step(); // includes the above forcings
+    //this->mem->barrier();
+    //if (this->rank == 0)
+    //{
+    //  std::cout << "post step after " << std::endl;
+    //std::cout << "u : "
+    //          << min(this->state(parent_t::ix::u)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::u)(this->domain))
+    //          << std::endl;
+    //std::cout << "w : "
+    //          << min(this->state(parent_t::ix::w)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::w)(this->domain))
+    //          << std::endl;
+    //std::cout << "th: " 
+    //          << min(this->state(parent_t::ix::th)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::th)(this->domain))
+    //          << std::endl;
+    //std::cout << "rv: " 
+    //          << min(this->state(parent_t::ix::rv)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rv)(this->domain))
+    //          << std::endl;
+    //std::cout << "rc: "
+    //          << min(this->state(parent_t::ix::rc)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rc)(this->domain))
+    //          << std::endl;
+    //std::cout << "rr: " 
+    //          << min(this->state(parent_t::ix::rr)(this->domain))
+    //          << ' '
+    //          << max(this->state(parent_t::ix::rr)(this->domain))
+    //          << std::endl;
+    //}
+    //this->mem->barrier();
   }
 
   libcloudphxx::blk_1m::opts_t<real_t> opts;

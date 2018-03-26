@@ -52,6 +52,7 @@ void setopts_micro(
     // </TODO>
     {solver_t::ix::rc, {"rc", "[kg kg-1]"}},
     {solver_t::ix::rr, {"rr", "[kg kg-1]"}},
-    {solver_t::ix::w, {"w", "[m/s]"}}
+    {solver_t::ix::w, {"w", "[m/s]"}},
+    {solver_t::ix::u, {"u", "[m/s]"}}
   };
 }

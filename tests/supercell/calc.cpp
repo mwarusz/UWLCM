@@ -21,10 +21,13 @@ int main(int ac, char** av)
   std::cout << "output directory: " << outdir << std::endl;
 */
   string opts_common = 
-    "--case=supercell --outfreq=60 --nt=240 --spinup=0 --nx=64 --ny=64 --nz=52 --dt=5 --relax_th_rv=false";
+    //"--case=supercell --outfreq=150 --nt=3600 --spinup=0 --nx=65 --ny=65 --nz=52 --dt=5 --relax_th_rv=false";
+    "--case=supercell --outfreq=60 --nt=1440 --spinup=0 --nx=65 --ny=65 --nz=52 --dt=5 --relax_th_rv=false";
+    //"--case=supercell --outfreq=30 --nt=2880 --spinup=0 --nx=65 --ny=65 --nz=52 --dt=2.5 --relax_th_rv=false";
   set<string> opts_micro({
-    //"--micro=blk_1m --outdir=out_blk_1m",
-    "--micro=blk_1m --outdir=out_blk_1m --cond=true --cevp=true --revp=false --conv=false --accr=false --sedi=false"
+    "--micro=blk_1m --outdir=out_blk_1m"
+    //"--micro=blk_1m --outdir=out_blk_1m --cond=false --cevp=false --revp=false --conv=false --accr=false --sedi=false"
+    //"--micro=blk_1m --outdir=out_blk_1m --revp=false --conv=false --accr=false --sedi=false"
   });
 
   for (auto &opts_m : opts_micro)
